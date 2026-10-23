@@ -8,45 +8,38 @@ Exposes REST endpoints to be consumed by React-Comps (or tested independently):
 """
 
 import base64
-import io
-import os
+from contextlib import asynccontextmanager
+
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
+from fastapi.responses import HTMLResponse
 
-from pipeline import get_pipeline, UI_CLASSES
+from pipeline import UI_CLASSES, get_pipeline
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+  get_pipeline()  # pre-warm the models before the first request
+  yield
+
 
 app = FastAPI(
     title="Sketch2React AI Microservice",
     description="Multimodal Hand-Drawn Sketch-to-React Component AI Engine (DL Labs 0-8 + Fraz DSA Sheet)",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for React-Comps frontend (Vite running on localhost:5173 or 3000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-class SketchRequest(BaseModel):
-  image_base64: Optional[str] = None
-  demo_component: Optional[str] = None  # "Button", "Card", "InputField", "Navbar", "Modal"
-
-
-@app.on_event("startup")
-def startup_event():
-  # Pre-warm pipeline on service startup
-  get_pipeline()
-
-
-from fastapi.responses import HTMLResponse
 
 @app.get("/")
 def root():
@@ -269,6 +262,7 @@ def interactive_demo_page():
           body: JSON.stringify({ image_base64: base64 })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
         currentData = data;
         spinner.style.display = 'none';
         outBox.style.display = 'block';
@@ -330,9 +324,13 @@ def interactive_demo_page():
             <span>${headerLabel}</span>
             <button id="copyBtn" class="copy-btn" onclick="copyCurrent()">Copy ${activeTab === 'code' ? 'Code' : 'Prompt'}</button>
           </div>
-          <pre id="displayedText">${content}</pre>
+          <pre id="displayedText">${escapeHtml(content)}</pre>
         </div>
       `;
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function copyCurrent() {
@@ -395,10 +393,11 @@ async def predict_sketch(request: Request):
         except Exception:
           pass
 
-  # 3. Fallback: synthetic button if nothing provided
   if img_np is None:
-    img_np = np.ones((227, 227, 3), dtype=np.uint8) * 255
-    cv2.rectangle(img_np, (45, 95), (180, 135), (20, 20, 20), 3)
+    raise HTTPException(
+        status_code=400,
+        detail="No valid image received. Send a multipart 'file' upload or JSON {\"image_base64\": \"data:image/png;base64,...\"}.",
+    )
 
   try:
     result = pipeline.process(img_np)

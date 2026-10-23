@@ -52,13 +52,13 @@ When a user draws a UI wireframe on the HTML5 canvas (`/demo`) or uploads an ima
 1. **Canvas Event & Stroke Serialization (Browser)**:
    The user draws with mouse/touch on a 227x227 HTML5 Canvas (`#1e293b` strokes on `#f8fafc` background). Clicking **"Analyze Sketch"** calls `canvas.toDataURL('image/png')` which serializes the drawing into a Base64 PNG string (`data:image/png;base64,...`) and sends an HTTP POST request to `/predict-sketch`.
 2. **Deskewing & Linear Algebra Alignment (`Lab 0` & `LeetCode 304`)**:
-   FastAPI ingests the image and converts it into a `(227, 227, 3)` RGB float tensor and a normalized luminance matrix `raw_gray` $\in [0, 1]$.
-   - *Lab 0 (Orthogonal Matrix)*: Straightens slanted strokes using an orthogonal rotation matrix $R(\theta)$ ($R \cdot R^T = I$, $\det(R)=1$).
+   FastAPI ingests the image and converts it into a 227x227 grayscale image and an ink map $\in [0, 1]$ (1 = stroke, 0 = paper).
+   - *Lab 0 (Orthogonal Matrix)*: Estimates the slant from the ink's minimum-area rectangle and straightens it (up to ±10°) using an orthogonal rotation matrix $R(\theta)$ ($R \cdot R^T = I$, $\det(R)=1$).
    - *2D Prefix Sum (LC 304)*: Computes a 2D cumulative sum grid $P[r][c] = \sum$ for $O(1)$ sub-region ink density queries.
 3. **Dual-Axis Bounding Box & Islands (`LeetCode 200`, `Two Pointers`, `LC 84`)**:
    - *Two Pointers*: Converges horizontally on column ink projection `h_proj` to find $[L, R]$, and vertically on row ink projection `v_proj` to find $[T, B]$:
      $\text{Width} = R - L$, $\text{Height} = B - T$, $\text{Aspect Ratio} = \text{Width} / \text{Height}$, $\text{Area} = (\text{Width} \cdot \text{Height}) / 227^2$, $Y_{\text{center}} = (T + B) / (2 \cdot 227)$.
-   - *BFS Islands (LC 200)*: Flood-fills connected black pixels to count discrete UI elements (e.g., a Card with header, text, and button has 26 stroke islands, while a simple Button has 6).
+   - *BFS Islands (LC 200)*: Flood-fills connected black pixels on a 28x28 ink patch to count discrete stroke groups (a Card with image, text and button typically has 10+ islands; a plain Button 1-2).
    - *Monotonic Stack (LC 84)*: Finds the maximal bounding rectangle inside the stroke histogram.
 4. **Perceptron Hyperplane Gate (`Lab 4`)**:
    Evaluates geometric linear separability using the Lab 4 Perceptron rule:
@@ -68,13 +68,14 @@ When a user draws a UI wireframe on the HTML5 canvas (`/demo`) or uploads an ima
    Applies zero-mean, unit-variance normalization:
    $$\hat{x}_i = \frac{x_i - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}}, \quad y_i = \gamma \hat{x}_i + \beta$$
    Standardizes light pencil strokes, dark ink pens, and varied background lighting so neural activations do not saturate.
-6. **Deep Visual Feature Extraction (`Lab 7` & `Lab 8`)**:
+6. **Deep Visual Classification (`Lab 7`)**:
    - *Lab 7 (AlexNet Backbone)*: Processes the normalized image through 5 Convolution layers with custom **Local Response Normalization (LRN)** and overlapping max pooling.
-   - *Lab 8 (Stacked Autoencoder)*: Reconstructs latent representations to ensure robust cold-start representations.
+   - AlexNet is trained on a generated dataset of hand-drawn sketches (see **Training the Model** below); its softmax output is the detected component and confidence.
+   - *Lab 6 / Lab 8* (custom GradientTape loop, autoencoder pre-training) are standalone modules in `core/` and are not part of inference.
 7. **Analytical Confidence Calibration (`Lab 2`)**:
-   Inputs $[\text{Aspect Ratio}, \text{Normalized Area}, \text{Base Confidence}]$ are forwarded through a 3-layer scratch MLP. Analytical Sigmoid gradients $\sigma'(z) = z(1-z)$ calibrate output softmax probabilities, preventing overconfident hallucinations.
+   Inputs $[\text{Aspect Ratio}, \text{Normalized Area}, \text{Base Confidence}]$ are forwarded through a 3-layer scratch MLP. Analytical Sigmoid gradients $\sigma'(z) = z(1-z)$ are implemented in `train_step`; at inference the (untrained) MLP's forward pass is reported in the trace only.
 8. **Component Styling & Variant Prediction (`Lab 5`)**:
-   A 28x28 component patch is passed to the Lab 5 ANN regularized with **Dropout (p = 0.2)**. Combined with ink density ($1.0 - \text{density}$), it classifies styling into:
+   A 28x28 component patch is passed to the Lab 5 ANN regularized with **Dropout (p = 0.2)** (untrained: there are no style labels yet). The variant is chosen from the component and ink density:
    - `Elevated Modern Card` (for cards with internal containers)
    - `Glassmorphism / Shadow` (for centered dialog modals)
    - `Outline Bordered` (for clean input fields & elongated borders)

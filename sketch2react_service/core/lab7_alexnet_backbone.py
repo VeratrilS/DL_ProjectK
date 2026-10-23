@@ -6,10 +6,19 @@ Used in Sketch2React for:
 - Overlapping pooling (3x3, stride 2) and heavy Dropout (0.5) to prevent overfitting
 """
 
+import os
+
+import cv2
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+
+from core.lab3_batch_norm import batch_norm_scratch
+
+UI_CLASSES = ["Button", "Card", "InputField", "Navbar", "Modal"]
+SKETCH_INPUT_SHAPE = (227, 227, 1)
+DEFAULT_WEIGHTS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "alexnet_sketch.weights.h5")
 
 
 class LocalResponseNormalization(layers.Layer):
@@ -95,6 +104,37 @@ def build_alexnet_model(
       loss=keras.losses.SparseCategoricalCrossentropy(),
       metrics=["accuracy"],
   )
+  return model
+
+
+def to_grayscale_227(img: np.ndarray) -> np.ndarray:
+  """Resizes any RGB / RGBA / grayscale uint8 image to a 227x227 grayscale uint8 image."""
+  if img.ndim == 3 and img.shape[2] == 4:
+    img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+  if img.ndim == 3:
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+  return cv2.resize(img, (227, 227), interpolation=cv2.INTER_AREA)
+
+
+def preprocess_sketch_for_alexnet(gray_227: np.ndarray) -> np.ndarray:
+  """Turns a 227x227 grayscale sketch into the AlexNet input tensor (227, 227, 1).
+
+  1. Invert so ink strokes are high-valued and blank paper is ~0.
+  2. Lab 3 Batch Normalization over the batch of pixels (zero mean, unit variance),
+     which makes a light pencil sketch and a dark marker sketch look the same to the network.
+  The SAME function is used for training and inference.
+  """
+  ink = 1.0 - gray_227.astype(np.float32) / 255.0
+  normed = batch_norm_scratch(ink.reshape(-1, 1), gamma=1.0, beta=0.0, eps=1e-5)
+  return normed.reshape(SKETCH_INPUT_SHAPE).astype(np.float32)
+
+
+def load_trained_alexnet(weights_path: str = DEFAULT_WEIGHTS_PATH):
+  """Returns the trained sketch classifier, or None if `train.py` has not been run yet."""
+  if not os.path.exists(weights_path):
+    return None
+  model = build_alexnet_model(input_shape=SKETCH_INPUT_SHAPE, num_classes=len(UI_CLASSES), dense_units=256)
+  model.load_weights(weights_path)
   return model
 
 

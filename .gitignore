@@ -43,3 +43,6 @@ ENV/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Generated sketch dataset (rebuild with: python sketch2react_service/generate_dataset.py)
+sketch2react_service/dataset/
