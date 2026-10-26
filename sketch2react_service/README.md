@@ -11,9 +11,9 @@
 When you draw on the interactive canvas (`/demo`) or upload an image:
 1. **Stroke Capture & Deskewing (`Lab 0`, `LC 304`)**: Pixels are deskewed via orthogonal transformation ($A \cdot A^T = I$). A 2D Prefix Sum matrix enables $O(1)$ density queries.
 2. **Boundary Discovery (`LC 84`, `LC 200`)**: Monotonic stack finds maximal rectangular bounds; Graph BFS groups disconnected strokes into unified components.
-3. **Deep Feature Extraction (`Lab 7`, `Lab 8`)**: Stacked Autoencoders (Lab 8) and an 8-layer AlexNet backbone with custom LRN (Lab 7) extract high-level visual representations.
-4. **Layout Verification & Styling (`Lab 4`, `Lab 5`)**: A Perceptron ($w \cdot x \ge -w_0$) enforces geometric aspect ratios (Button vs Card). An ANN with 0.2 Dropout predicts style variants (Primary, Outline, Glassmorphism).
-5. **Contrast Invariance & Calibration (`Lab 3`, `Lab 2`)**: Batch Normalization removes variations across pen types. An analytical backpropagation calibrator verifies confidence scores.
+3. **Deep Visual Classification (`Lab 7`)**: An 8-layer AlexNet with custom LRN, trained on a generated sketch dataset (`train.py`), classifies the sketch into one of 5 components (98.5% test accuracy).
+4. **Layout Gate & Styling (`Lab 4`, `Lab 5`)**: A Perceptron ($w \cdot x \ge -w_0$) separates Button vs Card in the rule-based fallback. The style variant (Primary, Outline, Glassmorphism) comes from geometry rules; the Lab 5 Dropout ANN is not trained yet.
+5. **Contrast Invariance (`Lab 3`)**: Batch Normalization over the pixel batch makes light pencil and dark marker sketches look the same to AlexNet. The Lab 2 scratch MLP's forward pass is reported in the trace.
 6. **JSX Hierarchy Resolution (`LC 210`)**: Kahn's Topological Sort orders the DOM containment tree (`PageWrapper > Card > Button`).
 7. **Agentic Code Synthesis (`LangGraph`, `Trie`)**: LangGraph StateGraph synthesizes complete JSX code enriched with Tailwind CSS utilities and Lucide icons via Trie tag lookup.
 8. **Live Preview (`/demo`)**: The UI JSON and generated LLM prompt are rendered live on the interactive canvas playground and ready for React-Comps export.
@@ -27,51 +27,46 @@ When you draw on the interactive canvas (`/demo`) or upload an image:
  [Hand-Drawn Sketch / Wireframe]
                │
                ▼
-   [Stage 1: Preprocessing & Straightening]  ──>  Lab 0 (Linear Algebra: Orthogonality & Trace)
-               │                             ──>  Fraz DSA: 2D Prefix Sum (LC 304) & Two Pointers
+   [Stage 1: Preprocessing & Straightening]  ──>  Lab 0 (Orthogonal rotation R: deskew up to ±10°)
+               │                             ──>  Fraz DSA: 2D Prefix Sum (LC 304) & Two Pointers (bounding box)
                ▼
-   [Stage 2: Visual Feature Extraction]      ──>  Lab 7 (AlexNet with Custom LRN Layer)
-               │                             ──>  Lab 6 (2D Spatial Convolutions & MaxPool)
-               ▼
-   [Stage 3: Feature Stabilization]          ──>  Lab 3 (Batch Normalization across Pen Contrasts)
+   [Stage 2: Contrast Normalization]         ──>  Lab 3 (Batch Normalization over the pixel batch)
                │
                ▼
-   [Stage 4: Latent Representation Pre-train]──>  Lab 8 (Stacked Autoencoder Pre-training)
+   [Stage 3: Component Classification]       ──>  Lab 7 (Trained AlexNet with Custom LRN): the prediction
+               │                             ──>  Fraz DSA: Min-Heap Top-3 (LC 347) & Binary Search
+               ▼
+   [Stage 4: Style Variant]                  ──>  Geometry/ink-density rules (+ Lab 5 Dropout ANN, untrained)
                │
                ▼
-   [Stage 5: Custom Mini-Batch Training]     ──>  Lab 6 (tf.GradientTape Custom Training Loop)
-               │
+   [Stage 5: Layout Analysis]                ──>  Fraz DSA: BFS Islands (LC 200), Monotonic Stack (LC 84), Merge Intervals (LC 56)
+               │                             ──>  Lab 4 Perceptron gate (decides only in the no-weights fallback)
                ▼
-   [Stage 6: Style & Variant Classification] ──>  Lab 5 (Multi-Layer ANN with Dropout 0.2)
-               │
-               ▼
-   [Stage 7: Layout Decision Boundary]       ──>  Lab 4 (Perceptron & -w0 Threshold Algorithm)
-               │                             ──>  Fraz DSA: Monotonic Stack (LC 84)
-               ▼
-   [Stage 8: Component Ordering & NMS]       ──>  Fraz DSA: Kahn's TopoSort & Merge Intervals (LC 56)
-               │                             ──>  Fraz DSA: Trie (Prefix Tree) for Tailwind/React Tags
-               │                             ──>  Lab 2 (First-Principles Backpropagation Validation)
+   [Stage 6: JSX Hierarchy & Prompt]         ──>  Fraz DSA: Kahn's TopoSort (LC 210), Tag Matcher (LC 20), Trie
+               │                             ──>  Lab 1 tensor ops & Lab 2 scratch MLP (reported in trace)
                ▼
  [Structured UI JSON + Enriched Prompt] ──> [React-Comps Vite Live Preview]
+
+ Standalone revision modules (not in the pipeline): Lab 6 (GradientTape loop), Lab 8 (autoencoder pre-training)
 ```
 
 ---
 
 ## Laboratory Mapping & Quick Revision Guide
 
-Each lab in the curriculum has a dedicated, standalone executable file in `core/` for exam and viva preparation:
+Each lab in the curriculum has a dedicated, standalone executable file in `core/` for exam and viva preparation. The detected component comes from **Lab 7** (AlexNet), fed by **Lab 0** (deskew) and **Lab 3** (normalization):
 
-| Lab | Module File | Key Theory & Equations | Role in Sketch2React |
+| Lab | Module File | Key Theory & Equations | Where it is used (✅ affects prediction, ⚠️ fallback only, ➖ trace/standalone) |
 |---|---|---|---|
-| **Lab 0** | `core/lab0_linear_algebra.py` | Orthogonal matrix ($A \cdot A^T = I$), Trace ($\sum A_{ii}$), Gaussian Elimination Upper Triangular ($\det = \prod U_{ii}$) | Straightening hand-drawn strokes with orthogonal rotation matrices and verifying zero shape distortion. |
-| **Lab 1** | `core/lab1_tf_graph.py` | `tf.constant`, tensor arithmetic (`tf.add`, `tf.subtract`), Keras `Sequential` graph execution | Immutable image tensor conversions and model compilation. |
-| **Lab 2** | `core/lab2_scratch_backprop.py` | Sigmoid $\sigma(z) = \frac{1}{1+e^{-z}}$, derivative $\sigma'(z) = z(1-z)$, output $\delta^{[L]} = (y-\hat{y})\sigma'$, hidden $\delta^{[l]} = (\sum W^T\delta)\sigma'$, manual updates | Pure mathematical backpropagation validating analytical gradients against automatic differentiation. |
-| **Lab 3** | `core/lab3_batch_norm.py` | $\hat{x} = \frac{x - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}}$, $y = \gamma \hat{x} + \beta$. Scratch NumPy vs Keras `BatchNormalization` | Normalizing stroke contrast across different pencils, pens, and paper brightness. |
-| **Lab 4** | `core/lab4_perceptron_boundary.py` | Perceptron decision rule: $w_1 x_1 + w_2 x_2 \ge -w_0$. Linear bounds: $\max_{y=0}(w \cdot x) < -w_0 \le \min_{y=1}(w \cdot x)$ | Fast geometric layout boundary deciding between Button and Card based on aspect ratio and area. |
-| **Lab 5** | `core/lab5_style_ann.py` | Flatten $\to$ Dense(16, sigmoid) $\to$ Dropout(0.2) $\to$ Dense(8, sigmoid) $\to$ Dropout(0.2) $\to$ Softmax | Predicting styling variants (Primary, Secondary, Outline, Danger) while preventing overfitting. |
-| **Lab 6** | `core/lab6_cnn_custom_training.py` | Custom mini-batch loop: `np.random.permutation`, `tf.GradientTape()`, `tape.gradient()`, `optimizer.apply_gradients()` | Training edge and contour detection layers with custom class-weighted loss. |
-| **Lab 7** | `core/lab7_alexnet_backbone.py` | 8-layer AlexNet: $11 \times 11$ conv (stride 4), Custom LRN Layer (`tf.nn.local_response_normalization`), overlapping pool ($3 \times 3$, stride 2), Dropout 0.5 | Primary visual backbone classifying sketches into 5 React component categories. |
-| **Lab 8** | `core/lab8_autoencoder_pretraining.py` | Overcoming vanishing gradients: random init gets stuck at 11% accuracy; greedy layer-wise Autoencoder MSE pre-training yields >96% accuracy | Pre-training representations on thousands of unlabeled sketches before fine-tuning. |
+| **Lab 0** | `core/lab0_linear_algebra.py` | Orthogonal matrix ($A \cdot A^T = I$), Trace ($\sum A_{ii}$), Gaussian Elimination Upper Triangular ($\det = \prod U_{ii}$) | ✅ `pipeline.deskew()` measures the slant and straightens the sketch with $R(	heta)$ before classification. |
+| **Lab 1** | `core/lab1_tf_graph.py` | `tf.constant`, tensor arithmetic (`tf.add`, `tf.subtract`), Keras `Sequential` graph execution | ➖ `tensor_arithmetic_demo()` value shown in the trace; all models are Keras graphs. |
+| **Lab 2** | `core/lab2_scratch_backprop.py` | Sigmoid $\sigma(z) = \frac{1}{1+e^{-z}}$, derivative $\sigma'(z) = z(1-z)$, output $\delta^{[L]} = (y-\hat{y})\sigma'$, hidden $\delta^{[l]} = (\sum W^T\delta)\sigma'$, manual updates | ➖ `ScratchMLP.forward()` on geometric features; untrained, trace only. |
+| **Lab 3** | `core/lab3_batch_norm.py` | $\hat{x} = \frac{x - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}}$, $y = \gamma \hat{x} + \beta$. Scratch NumPy vs Keras `BatchNormalization` | ✅ `batch_norm_scratch()` in `preprocess_sketch_for_alexnet()` (training + inference): pen-contrast invariance. |
+| **Lab 4** | `core/lab4_perceptron_boundary.py` | Perceptron decision rule: $w_1 x_1 + w_2 x_2 \ge -w_0$. Linear bounds: $\max_{y=0}(w \cdot x) < -w_0 \le \min_{y=1}(w \cdot x)$ | ⚠️ `classify_button_vs_card()`: used only by the rule-based fallback when no trained weights exist. |
+| **Lab 5** | `core/lab5_style_ann.py` | Flatten $\to$ Dense(16, sigmoid) $\to$ Dropout(0.2) $\to$ Dense(8, sigmoid) $\to$ Dropout(0.2) $\to$ Softmax | ➖ `predict_component_style()`: untrained (no style labels yet); style variant comes from rules. |
+| **Lab 6** | `core/lab6_cnn_custom_training.py` | Custom mini-batch loop: `np.random.permutation`, `tf.GradientTape()`, `tape.gradient()`, `optimizer.apply_gradients()` | ➖ Standalone module, not part of the pipeline. |
+| **Lab 7** | `core/lab7_alexnet_backbone.py` | 8-layer AlexNet: $11 \times 11$ conv (stride 4), Custom LRN Layer (`tf.nn.local_response_normalization`), overlapping pool ($3 \times 3$, stride 2), Dropout 0.5 | ✅ **The classifier**: trained by `train.py`, loaded by `load_trained_alexnet()` (98.5% test accuracy). |
+| **Lab 8** | `core/lab8_autoencoder_pretraining.py` | Overcoming vanishing gradients: random init gets stuck at 11% accuracy; greedy layer-wise Autoencoder MSE pre-training yields >96% accuracy | ➖ Standalone module, not part of the pipeline. |
 
 ---
 

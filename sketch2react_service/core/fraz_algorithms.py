@@ -232,6 +232,8 @@ def validate_jsx_nesting_tags(tokens: List[str]) -> bool:
   """
   stack = []
   for token in tokens:
+    if token.endswith("/>"):
+      continue  # self-closing tag like <Button /> opens and closes itself
     if token.startswith("<") and not token.startswith("</"):
       tag_name = token.strip("<>")
       stack.append(tag_name)
